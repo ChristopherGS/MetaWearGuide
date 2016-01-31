@@ -12,14 +12,20 @@ import android.os.IBinder;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CompoundButton;
+import android.widget.Switch;
 
+import com.mbientlab.metawear.Message;
 import com.mbientlab.metawear.MetaWearBleService;
 import com.mbientlab.metawear.MetaWearBoard;
 import static com.mbientlab.metawear.MetaWearBoard.ConnectionStateHandler;
 import static com.mbientlab.metawear.AsyncOperation.CompletionHandler;
 
+import com.mbientlab.metawear.RouteManager;
 import com.mbientlab.metawear.UnsupportedModuleException;
+import com.mbientlab.metawear.data.CartesianFloat;
 import com.mbientlab.metawear.module.Led;
+import com.mbientlab.metawear.module.Accelerometer;
 
 public class MyActivity extends AppCompatActivity implements ServiceConnection {
 
@@ -29,10 +35,14 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
     private Button connect;
     private Button led_on;
     private Button led_off;
+    private Switch accel_switch;
+    private static final float ACC_RANGE = 8.f, ACC_FREQ = 50.f;
+    private static final String STREAM_KEY = "accel_stream";
 
     //METAWEAR OBJECTS
     private MetaWearBleService.LocalBinder serviceBinder;
     private Led ledModule;
+    private Accelerometer accelModule;
     private MetaWearBoard mwBoard;
 
     private final ConnectionStateHandler stateHandler= new ConnectionStateHandler() {
@@ -41,6 +51,7 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
             Log.i(TAG, "Connected");
             try {
                 ledModule = mwBoard.getModule(Led.class);
+                accelModule = mwBoard.getModule(Accelerometer.class);
             } catch (UnsupportedModuleException e) {
                 e.printStackTrace();
             }
@@ -65,6 +76,43 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
                 public void onClick(View v) {
                     Log.i(TAG, "Turn off LED");
                     ledModule.stop(true);
+                }
+            });
+
+            Switch accel_switch = (Switch) findViewById(R.id.accel_switch);
+            accel_switch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                    Log.i("Switch State=", "" + isChecked);
+                    if (isChecked) {
+                        accelModule.setOutputDataRate(ACC_FREQ);
+                        accelModule.setAxisSamplingRange(ACC_RANGE);
+
+                        accelModule.routeData()
+                                .fromAxes().stream(STREAM_KEY)
+                                .commit().onComplete(new CompletionHandler<RouteManager>() {
+                            @Override
+                            public void success(RouteManager result) {
+                                result.subscribe(STREAM_KEY, new RouteManager.MessageHandler() {
+                                    @Override
+                                    public void process(Message message) {
+                                        CartesianFloat axes = message.getData(CartesianFloat.class);
+                                        Log.i(TAG, axes.toString());
+                                    }
+
+                                });
+                            }
+
+                            @Override
+                            public void failure(Throwable error) {
+                                Log.e(TAG, "Error committing route", error);
+                            }
+                        });
+                        accelModule.enableAxisSampling();
+                        accelModule.start();
+                    } else {
+                        accelModule.disableAxisSampling();
+                        accelModule.stop();
+                    }
                 }
             });
 
@@ -131,5 +179,7 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
 
     @Override
     public void onServiceDisconnected(ComponentName componentName) { }
+
+
 
 }
