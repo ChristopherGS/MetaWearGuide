@@ -18,18 +18,56 @@ import com.mbientlab.metawear.MetaWearBoard;
 import static com.mbientlab.metawear.MetaWearBoard.ConnectionStateHandler;
 import static com.mbientlab.metawear.AsyncOperation.CompletionHandler;
 
+import com.mbientlab.metawear.UnsupportedModuleException;
+import com.mbientlab.metawear.module.Led;
+
 public class MyActivity extends AppCompatActivity implements ServiceConnection {
 
-    private MetaWearBleService.LocalBinder serviceBinder;
+    //CONSTANTS
     private final String MW_MAC_ADDRESS= "D5:9C:DC:37:BA:AE"; //update with your board's MAC address
-    private MetaWearBoard mwBoard;
     private static final String TAG = "MetaWear";
     private Button connect;
+    private Button led_on;
+    private Button led_off;
+
+    //METAWEAR OBJECTS
+    private MetaWearBleService.LocalBinder serviceBinder;
+    private Led ledModule;
+    private MetaWearBoard mwBoard;
 
     private final ConnectionStateHandler stateHandler= new ConnectionStateHandler() {
         @Override
         public void connected() {
             Log.i(TAG, "Connected");
+            try {
+                ledModule = mwBoard.getModule(Led.class);
+            } catch (UnsupportedModuleException e) {
+                e.printStackTrace();
+            }
+
+            led_on=(Button)findViewById(R.id.led_on);
+            led_on.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Log.i(TAG, "Turn on LED");
+                    ledModule.configureColorChannel(Led.ColorChannel.BLUE)
+                            .setRiseTime((short) 0).setPulseDuration((short) 1000)
+                            .setRepeatCount((byte) -1).setHighTime((short) 500)
+                            .setHighIntensity((byte) 16).setLowIntensity((byte) 16)
+                            .commit();
+                    ledModule.play(true);
+                }
+            });
+
+            led_off=(Button)findViewById(R.id.led_off);
+            led_off.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Log.i(TAG, "Turn off LED");
+                    ledModule.stop(true);
+                }
+            });
+
         }
 
         @Override
@@ -52,6 +90,7 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
         // Create a MetaWear board object for the Bluetooth Device
         mwBoard= serviceBinder.getMetaWearBoard(remoteDevice);
         mwBoard.setConnectionStateHandler(stateHandler);
+
 
     }
 
