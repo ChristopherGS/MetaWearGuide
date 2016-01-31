@@ -1,37 +1,96 @@
 package com.christophergs.metawearguide;
 
+import android.app.Activity;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothManager;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.content.*;
+import android.os.IBinder;
+import android.util.Log;
+import android.view.View;
+import android.widget.Button;
 
-public class MyActivity extends AppCompatActivity {
+import com.mbientlab.metawear.MetaWearBleService;
+import com.mbientlab.metawear.MetaWearBoard;
+import static com.mbientlab.metawear.MetaWearBoard.ConnectionStateHandler;
+import static com.mbientlab.metawear.AsyncOperation.CompletionHandler;
+
+public class MyActivity extends AppCompatActivity implements ServiceConnection {
+
+    private MetaWearBleService.LocalBinder serviceBinder;
+    private final String MW_MAC_ADDRESS= "D5:9C:DC:37:BA:AE"; //update with your board's MAC address
+    private MetaWearBoard mwBoard;
+    private static final String TAG = "MetaWear";
+    private Button connect;
+
+    private final ConnectionStateHandler stateHandler= new ConnectionStateHandler() {
+        @Override
+        public void connected() {
+            Log.i(TAG, "Connected");
+        }
+
+        @Override
+        public void disconnected() {
+            Log.i(TAG, "Connected Lost");
+        }
+
+        @Override
+        public void failure(int status, Throwable error) {
+            Log.e(TAG, "Error connecting", error);
+        }
+    };
+
+    public void retrieveBoard() {
+        final BluetoothManager btManager=
+                (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+        final BluetoothDevice remoteDevice=
+                btManager.getAdapter().getRemoteDevice(MW_MAC_ADDRESS);
+
+        // Create a MetaWear board object for the Bluetooth Device
+        mwBoard= serviceBinder.getMetaWearBoard(remoteDevice);
+        mwBoard.setConnectionStateHandler(stateHandler);
+
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_my);
+
+        ///< Bind the service when the activity is created
+        getApplicationContext().bindService(new Intent(this, MetaWearBleService.class),
+                this, Context.BIND_AUTO_CREATE);
+
+        Log.i(TAG, "log test");
+        connect=(Button)findViewById(R.id.connect);
+        connect.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Log.i(TAG, "Clicked connect");
+                mwBoard.connect();
+            }
+        });
     }
 
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_my, menu);
-        return true;
+    public void onDestroy() {
+        super.onDestroy();
+
+        ///< Unbind the service when the activity is destroyed
+        getApplicationContext().unbindService(this);
     }
 
     @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
-
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
-        }
-
-        return super.onOptionsItemSelected(item);
+    public void onServiceConnected(ComponentName name, IBinder service) {
+        ///< Typecast the binder to the service's LocalBinder class
+        serviceBinder = (MetaWearBleService.LocalBinder) service;
+        retrieveBoard();
     }
+
+    @Override
+    public void onServiceDisconnected(ComponentName componentName) { }
+
 }
