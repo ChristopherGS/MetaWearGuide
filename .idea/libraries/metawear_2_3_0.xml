@@ -5,8 +5,6 @@
       <root url="jar://$PROJECT_DIR$/app/build/intermediates/exploded-aar/com.mbientlab/metawear/2.3.0/jars/classes.jar!/" />
     </CLASSES>
     <JAVADOC />
-    <SOURCES>
-      <root url="jar://$PROJECT_DIR$/app/build/intermediates/exploded-aar/com.mbientlab/metawear/2.3.0/jars/sources.jar!/" />
-    </SOURCES>
+    <SOURCES />
   </library>
 </component>
