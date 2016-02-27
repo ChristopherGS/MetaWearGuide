@@ -24,8 +24,10 @@ import static com.mbientlab.metawear.AsyncOperation.CompletionHandler;
 import com.mbientlab.metawear.RouteManager;
 import com.mbientlab.metawear.UnsupportedModuleException;
 import com.mbientlab.metawear.data.CartesianFloat;
+import com.mbientlab.metawear.data.CartesianShort;
 import com.mbientlab.metawear.module.Led;
 import com.mbientlab.metawear.module.Accelerometer;
+import com.mbientlab.metawear.module.Logging;
 
 public class MyActivity extends AppCompatActivity implements ServiceConnection {
 
@@ -38,12 +40,14 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
     private Switch accel_switch;
     private static final float ACC_RANGE = 8.f, ACC_FREQ = 50.f;
     private static final String STREAM_KEY = "accel_stream";
+    private static final String LOG_KEY = "accel_log";
 
     //METAWEAR OBJECTS
     private MetaWearBleService.LocalBinder serviceBinder;
     private Led ledModule;
     private Accelerometer accelModule;
     private MetaWearBoard mwBoard;
+    private Logging loggingModule;
 
     private final ConnectionStateHandler stateHandler= new ConnectionStateHandler() {
         @Override
@@ -52,6 +56,7 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
             try {
                 ledModule = mwBoard.getModule(Led.class);
                 accelModule = mwBoard.getModule(Accelerometer.class);
+                loggingModule = mwBoard.getModule(Logging.class);
             } catch (UnsupportedModuleException e) {
                 e.printStackTrace();
             }
@@ -81,6 +86,7 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
 
             Switch accel_switch = (Switch) findViewById(R.id.accel_switch);
             accel_switch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+
                 public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                     Log.i("Switch State=", "" + isChecked);
                     if (isChecked) {
@@ -88,10 +94,11 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
                         accelModule.setAxisSamplingRange(ACC_RANGE);
 
                         accelModule.routeData()
-                                .fromAxes().stream(STREAM_KEY)
+                                .fromAxes().log(LOG_KEY)
                                 .commit().onComplete(new CompletionHandler<RouteManager>() {
                             @Override
                             public void success(RouteManager result) {
+                                /*
                                 result.subscribe(STREAM_KEY, new RouteManager.MessageHandler() {
                                     @Override
                                     public void process(Message message) {
@@ -100,6 +107,14 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
                                     }
 
                                 });
+                                */
+                                result.setLogMessageHandler(LOG_KEY, new RouteManager.MessageHandler() {
+                                    @Override
+                                    public void process(Message msg) {
+                                        final CartesianShort axisData = msg.getData(CartesianShort.class);
+                                        Log.i(TAG, String.format("Log: %s", axisData.toString()));
+                                    }
+                                });
                             }
 
                             @Override
@@ -107,11 +122,21 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
                                 Log.e(TAG, "Error committing route", error);
                             }
                         });
+                        loggingModule.startLogging();
                         accelModule.enableAxisSampling();
                         accelModule.start();
                     } else {
+                        loggingModule.stopLogging();
                         accelModule.disableAxisSampling();
                         accelModule.stop();
+                        loggingModule.downloadLog(0.05f, new Logging.DownloadHandler() { 
+                            @Override
+                            public void onProgressUpdate(int nEntriesLeft, int totalEntries) {
+                                Log.i(TAG, String.format("Progress= %d / %d", nEntriesLeft,
+                                        totalEntries));
+                            }
+                        });
+                        Log.i(TAG, "Log size: " + loggingModule.getLogCapacity());
                     }
                 }
             });
@@ -138,7 +163,6 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
         // Create a MetaWear board object for the Bluetooth Device
         mwBoard= serviceBinder.getMetaWearBoard(remoteDevice);
         mwBoard.setConnectionStateHandler(stateHandler);
-
 
     }
 
