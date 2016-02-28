@@ -20,23 +20,42 @@
         android:id="@+id/led_on"
         android:layout_below="@+id/connect"
         android:layout_centerHorizontal="true"
-        android:layout_marginTop="58dp" />
+        android:layout_marginTop="80dp" />
 
     <Button
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="LED off"
         android:id="@+id/led_off"
-        android:layout_centerVertical="true"
+        android:layout_marginTop="80dp"
         android:layout_centerHorizontal="true" />
 
     <Switch
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Toggle Accelerometer"
+        android:text="Toggle Both"
         android:id="@+id/accel_switch"
-        android:layout_below="@+id/led_off"
+        android:layout_centerVertical="true"
+        android:layout_centerHorizontal="true" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?android:attr/textAppearanceLarge"
+        android:text="Accelerometer: 0"
+        android:id="@+id/textAccel"
+        android:layout_below="@+id/accel_switch"
         android:layout_centerHorizontal="true"
-        android:layout_marginTop="66dp" />
+        android:layout_marginTop="40dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?android:attr/textAppearanceLarge"
+        android:text="Gyroscope: 0"
+        android:id="@+id/textGyro"
+        android:layout_below="@+id/textAccel"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="40dp"/>
 
 </RelativeLayout>

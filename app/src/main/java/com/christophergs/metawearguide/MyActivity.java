@@ -14,7 +14,9 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.Switch;
+import android.widget.TextView;
 
+import com.mbientlab.metawear.AsyncOperation;
 import com.mbientlab.metawear.Message;
 import com.mbientlab.metawear.MetaWearBleService;
 import com.mbientlab.metawear.MetaWearBoard;
@@ -24,10 +26,16 @@ import static com.mbientlab.metawear.AsyncOperation.CompletionHandler;
 import com.mbientlab.metawear.RouteManager;
 import com.mbientlab.metawear.UnsupportedModuleException;
 import com.mbientlab.metawear.data.CartesianFloat;
-import com.mbientlab.metawear.data.CartesianShort;
+import com.mbientlab.metawear.module.Bmi160Gyro;
+import com.mbientlab.metawear.module.Bmi160Accelerometer;
 import com.mbientlab.metawear.module.Led;
 import com.mbientlab.metawear.module.Accelerometer;
+import com.mbientlab.metawear.module.Bmi160Gyro.*;
 import com.mbientlab.metawear.module.Logging;
+
+import java.io.BufferedOutputStream;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
 
 public class MyActivity extends AppCompatActivity implements ServiceConnection {
 
@@ -41,118 +49,125 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
     private static final float ACC_RANGE = 8.f, ACC_FREQ = 50.f;
     private static final String STREAM_KEY = "accel_stream";
     private static final String LOG_KEY = "accel_log";
+    private static final String GYRO_STREAM_KEY = "gyro_stream";
+    TextView accelData;
+    TextView gyroData;
 
     //METAWEAR OBJECTS
     private MetaWearBleService.LocalBinder serviceBinder;
     private Led ledModule;
-    private Accelerometer accelModule;
+    private Bmi160Accelerometer accelModule;
+    private Bmi160Gyro gyroModule;
+
     private MetaWearBoard mwBoard;
     private Logging loggingModule;
 
-    private final ConnectionStateHandler stateHandler= new ConnectionStateHandler() {
-        @Override
-        public void connected() {
-            Log.i(TAG, "Connected");
-            try {
-                ledModule = mwBoard.getModule(Led.class);
-                accelModule = mwBoard.getModule(Accelerometer.class);
-                loggingModule = mwBoard.getModule(Logging.class);
-            } catch (UnsupportedModuleException e) {
-                e.printStackTrace();
+    public final ConnectionStateHandler stateHandler;
+
+    {
+        stateHandler = new ConnectionStateHandler() {
+            @Override
+            public void connected() {
+                Log.i(TAG, "Connected");
+                try {
+                    ledModule = mwBoard.getModule(Led.class);
+                    accelModule = mwBoard.getModule(Bmi160Accelerometer.class);
+                    loggingModule = mwBoard.getModule(Logging.class);
+                    gyroModule = mwBoard.getModule(Bmi160Gyro.class);
+                } catch (UnsupportedModuleException e) {
+                    e.printStackTrace();
+                }
+
+                led_on = (Button) findViewById(R.id.led_on);
+                led_on.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Log.i(TAG, "Turn on LED");
+                        ledModule.configureColorChannel(Led.ColorChannel.BLUE)
+                                .setRiseTime((short) 0).setPulseDuration((short) 1000)
+                                .setRepeatCount((byte) -1).setHighTime((short) 500)
+                                .setHighIntensity((byte) 16).setLowIntensity((byte) 16)
+                                .commit();
+                        ledModule.play(true);
+                    }
+                });
+
+                led_off = (Button) findViewById(R.id.led_off);
+                led_off.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Log.i(TAG, "Turn off LED");
+                        ledModule.stop(true);
+                    }
+                });
+
+                Switch accel_switch = (Switch) findViewById(R.id.accel_switch);
+                accel_switch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+
+                    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                        Log.i("Switch State=", "" + isChecked);
+                        if (isChecked) {
+                            accelModule.setOutputDataRate(ACC_FREQ);
+                            accelModule.setAxisSamplingRange(ACC_RANGE);
+                            gyroModule.configure()
+                                    .setOutputDataRate(OutputDataRate.ODR_50_HZ)
+                                    .setFullScaleRange(FullScaleRange.FSR_500)
+                                    .commit();
+
+                            AsyncOperation<RouteManager> routeManagerResultAccel = accelModule.routeData().fromAxes().stream(STREAM_KEY).commit();
+                            AsyncOperation<RouteManager> routeManagerResultGyro = gyroModule.routeData().fromAxes().stream(GYRO_STREAM_KEY).commit();
+
+                            routeManagerResultAccel.onComplete(new CompletionHandler<RouteManager>() {
+                                @Override
+                                public void success(RouteManager result) {
+                                    result.subscribe(STREAM_KEY, new RouteManager.MessageHandler() {
+                                        @Override
+                                        public void process(Message msg) {
+                                            final CartesianFloat axes = msg.getData(CartesianFloat.class);
+                                            Log.i(TAG, String.format("Accelerometer: %s", axes.toString()));
+                                            sensorMsg(String.format(axes.toString()), "accel");
+                                        }
+                                    });
+                                }
+                            });
+
+                            routeManagerResultGyro.onComplete(new CompletionHandler<RouteManager>() {
+                                @Override
+                                public void success(RouteManager result) {
+                                    result.subscribe(GYRO_STREAM_KEY, new RouteManager.MessageHandler() {
+                                        @Override
+                                        public void process(Message msg) {
+                                            final CartesianFloat spinData = msg.getData(CartesianFloat.class);
+                                            Log.i(TAG, String.format("Gyroscope: %s", spinData.toString()));
+                                            sensorMsg(String.format(spinData.toString()), "gyro");
+                                        }
+                                    });
+                                }
+                            });
+                            accelModule.enableAxisSampling();
+                            accelModule.start();
+                            gyroModule.start();
+                        } else {
+                            gyroModule.stop();
+                            accelModule.disableAxisSampling();
+                            accelModule.stop();
+                        }
+                    }
+                });
+
             }
 
-            led_on=(Button)findViewById(R.id.led_on);
-            led_on.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    Log.i(TAG, "Turn on LED");
-                    ledModule.configureColorChannel(Led.ColorChannel.BLUE)
-                            .setRiseTime((short) 0).setPulseDuration((short) 1000)
-                            .setRepeatCount((byte) -1).setHighTime((short) 500)
-                            .setHighIntensity((byte) 16).setLowIntensity((byte) 16)
-                            .commit();
-                    ledModule.play(true);
-                }
-            });
+            @Override
+            public void disconnected() {
+                Log.i(TAG, "Connected Lost");
+            }
 
-            led_off=(Button)findViewById(R.id.led_off);
-            led_off.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    Log.i(TAG, "Turn off LED");
-                    ledModule.stop(true);
-                }
-            });
-
-            Switch accel_switch = (Switch) findViewById(R.id.accel_switch);
-            accel_switch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-
-                public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                    Log.i("Switch State=", "" + isChecked);
-                    if (isChecked) {
-                        accelModule.setOutputDataRate(ACC_FREQ);
-                        accelModule.setAxisSamplingRange(ACC_RANGE);
-
-                        accelModule.routeData()
-                                .fromAxes().log(LOG_KEY)
-                                .commit().onComplete(new CompletionHandler<RouteManager>() {
-                            @Override
-                            public void success(RouteManager result) {
-                                /*
-                                result.subscribe(STREAM_KEY, new RouteManager.MessageHandler() {
-                                    @Override
-                                    public void process(Message message) {
-                                        CartesianFloat axes = message.getData(CartesianFloat.class);
-                                        Log.i(TAG, axes.toString());
-                                    }
-
-                                });
-                                */
-                                result.setLogMessageHandler(LOG_KEY, new RouteManager.MessageHandler() {
-                                    @Override
-                                    public void process(Message msg) {
-                                        final CartesianShort axisData = msg.getData(CartesianShort.class);
-                                        Log.i(TAG, String.format("Log: %s", axisData.toString()));
-                                    }
-                                });
-                            }
-
-                            @Override
-                            public void failure(Throwable error) {
-                                Log.e(TAG, "Error committing route", error);
-                            }
-                        });
-                        loggingModule.startLogging();
-                        accelModule.enableAxisSampling();
-                        accelModule.start();
-                    } else {
-                        loggingModule.stopLogging();
-                        accelModule.disableAxisSampling();
-                        accelModule.stop();
-                        loggingModule.downloadLog(0.05f, new Logging.DownloadHandler() { 
-                            @Override
-                            public void onProgressUpdate(int nEntriesLeft, int totalEntries) {
-                                Log.i(TAG, String.format("Progress= %d / %d", nEntriesLeft,
-                                        totalEntries));
-                            }
-                        });
-                        Log.i(TAG, "Log size: " + loggingModule.getLogCapacity());
-                    }
-                }
-            });
-
-        }
-
-        @Override
-        public void disconnected() {
-            Log.i(TAG, "Connected Lost");
-        }
-
-        @Override
-        public void failure(int status, Throwable error) {
-            Log.e(TAG, "Error connecting", error);
-        }
-    };
+            @Override
+            public void failure(int status, Throwable error) {
+                Log.e(TAG, "Error connecting", error);
+            }
+        };
+    }
 
     public void retrieveBoard() {
         final BluetoothManager btManager=
@@ -184,6 +199,8 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
                 mwBoard.connect();
             }
         });
+        accelData = (TextView) findViewById(R.id.textAccel);
+        gyroData = (TextView) findViewById(R.id.textGyro);
     }
 
     @Override
@@ -204,6 +221,18 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
     @Override
     public void onServiceDisconnected(ComponentName componentName) { }
 
-
+    public void sensorMsg(String msg, final String sensor) {
+        final String reading = msg;
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (sensor == "accel") {
+                    accelData.setText("Accel: " + reading);
+                } else {
+                    gyroData.setText("Gyro: " + reading);
+                }
+            }
+        });
+    }
 
 }
