@@ -1,5 +1,6 @@
 package com.christophergs.metawearguide;
 
+import android.app.Activity;
 import android.app.ProgressDialog;
 import android.bluetooth.BluetoothDevice;
 import android.content.ComponentName;
@@ -85,6 +86,9 @@ public class ScannerActivity extends AppCompatActivity implements ScannerCommuni
             public void connected() {
                 connectDialog.dismiss();
                 Log.i(TAG, String.format("MAC Address: %s", mwBoard.getMacAddress()));
+                Intent mainActivityIntent = new Intent(ScannerActivity.this, MyActivity.class);
+                mainActivityIntent.putExtra(MyActivity.EXTRA_BT_DEVICE, btDevice);
+                ScannerActivity.this.startActivity(mainActivityIntent);
             }
 
             @Override
