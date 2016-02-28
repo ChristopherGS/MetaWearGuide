@@ -3,6 +3,7 @@ package com.christophergs.metawearguide;
 import android.app.Activity;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothManager;
+import android.os.Environment;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.Menu;
@@ -34,6 +35,7 @@ import com.mbientlab.metawear.module.Bmi160Gyro.*;
 import com.mbientlab.metawear.module.Logging;
 
 import java.io.BufferedOutputStream;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
 
@@ -106,7 +108,24 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
 
                     public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                         Log.i("Switch State=", "" + isChecked);
+                        final String CSV_HEADER = String.format("sensor,x_axis,y_axis,z_axis");
+                        final String filename = "METAWEAR.csv";
+                        final File path = new File(Environment.getExternalStoragePublicDirectory(
+                                Environment.DIRECTORY_DOWNLOADS), filename);
                         if (isChecked) {
+                            //delete the csv file if it already exists (will be from older recordings)
+                            boolean is_deleted = path.delete();
+                            Log.i(TAG, "deleted: " + is_deleted);
+
+                            OutputStream out;
+                            try {
+                                out = new BufferedOutputStream(new FileOutputStream(path, true));
+                                out.write(CSV_HEADER.getBytes());
+                                out.write("\n".getBytes());
+                                out.close();
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
                             accelModule.setOutputDataRate(ACC_FREQ);
                             accelModule.setAxisSamplingRange(ACC_RANGE);
                             gyroModule.configure()
@@ -126,6 +145,18 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
                                             final CartesianFloat axes = msg.getData(CartesianFloat.class);
                                             Log.i(TAG, String.format("Accelerometer: %s", axes.toString()));
                                             sensorMsg(String.format(axes.toString()), "accel");
+                                            //CSV CODE
+                                            String accel_entry = String.format("Accel, %s", axes.toString());
+                                            String csv_accel_entry = accel_entry + ",";
+                                            OutputStream out;
+                                            try {
+                                                out = new BufferedOutputStream(new FileOutputStream(path, true));
+                                                out.write(csv_accel_entry.getBytes());
+                                                out.write("\n".getBytes());
+                                                out.close();
+                                            } catch (Exception e) {
+                                                Log.e(TAG, "CSV creation error", e);
+                                            }
                                         }
                                     });
                                 }
@@ -140,20 +171,36 @@ public class MyActivity extends AppCompatActivity implements ServiceConnection {
                                             final CartesianFloat spinData = msg.getData(CartesianFloat.class);
                                             Log.i(TAG, String.format("Gyroscope: %s", spinData.toString()));
                                             sensorMsg(String.format(spinData.toString()), "gyro");
+                                            //CSV CODE
+                                            String gyro_entry = String.format("Gyro, %s", spinData.toString());
+                                            String csv_gyro_entry = gyro_entry + ",";
+                                            OutputStream out;
+                                            try {
+                                                out = new BufferedOutputStream(new FileOutputStream(path, true));
+                                                out.write(csv_gyro_entry.getBytes());
+                                                out.write("\n".getBytes());
+                                                out.close();
+                                            } catch (Exception e) {
+                                                Log.e(TAG, "CSV creation error", e);
+                                            }
                                         }
                                     });
                                 }
                             });
-                            accelModule.enableAxisSampling();
-                            accelModule.start();
-                            gyroModule.start();
-                        } else {
-                            gyroModule.stop();
-                            accelModule.disableAxisSampling();
-                            accelModule.stop();
-                        }
+                        accelModule.enableAxisSampling();
+                        accelModule.start();
+                        gyroModule.start();
                     }
-                });
+
+                    else
+
+                    {
+                        gyroModule.stop();
+                        accelModule.disableAxisSampling();
+                        accelModule.stop();
+                    }
+                }
+            });
 
             }
 
